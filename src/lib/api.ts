@@ -126,6 +126,13 @@ class ApiClient {
   async getTags() {
     return this.request<any[]>("/tags");
   }
+
+  // Theme settings endpoint (public)
+  async getThemeSettings() {
+    return this.request<{
+      settings: Array<{ id: string; value: any }>;
+    }>("/theme/settings");
+  }
 }
 
 // Export a singleton instance

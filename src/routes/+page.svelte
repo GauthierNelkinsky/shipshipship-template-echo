@@ -18,11 +18,12 @@
         Filter as FilterIcon,
         List,
         LayoutGrid,
+        Tag as TagIcon,
     } from "lucide-svelte";
 
     // Data state
-    let ideas = $state<Event[]>([]);
-    let filteredIdeas = $state<Event[]>([]);
+    let posts = $state<Event[]>([]);
+    let filteredPosts = $state<Event[]>([]);
     let loading = $state(true);
     let error = $state("");
 
@@ -33,45 +34,106 @@
     let sortBy = $state<"newest" | "popular" | "oldest">("newest");
     let showTagsPopover = $state(false);
     let viewMode = $state<"list" | "kanban">("list");
+    let filterPopoverRef = $state<HTMLDivElement | null>(null);
+
+    // Theme settings
+    let displayFeedbackPublicly = $state(true);
 
     // Vote state
-    let votedIdeas = $state(new Set<number>());
+    let votedPosts = $state(new Set<number>());
     let voteErrors = $state<Record<number, string>>({});
 
     // Modal state
     let showModal = $state(false);
-    let ideaTitle = $state("");
-    let ideaDescription = $state("");
-    let selectedTagIds = $state<number[]>([]);
-    let submittingIdea = $state(false);
-    let ideaError = $state("");
+    let postTitle = $state("");
+    let postDescription = $state("");
+    let submittingPost = $state(false);
+    let postError = $state("");
+    let formStartTime = $state(Date.now());
 
     onMount(async () => {
-        await loadIdeas();
+        await loadThemeSettings();
+        await loadPosts();
         await loadTags();
-        loadVotedIdeasFromStorage();
+        loadVotedPostsFromStorage();
+
+        // Handle click outside to close filter popover
+        const handleClickOutside = (event: MouseEvent) => {
+            if (
+                showTagsPopover &&
+                filterPopoverRef &&
+                !filterPopoverRef.contains(event.target as Node)
+            ) {
+                showTagsPopover = false;
+            }
+        };
+
+        document.addEventListener("click", handleClickOutside);
+
+        return () => {
+            document.removeEventListener("click", handleClickOutside);
+        };
     });
 
-    async function loadIdeas() {
+    async function loadThemeSettings() {
+        try {
+            const settingsData = await api.getThemeSettings();
+
+            if (settingsData.settings) {
+                // Check if settings is an object or array
+                if (Array.isArray(settingsData.settings)) {
+                    const feedbackSetting = settingsData.settings.find(
+                        (s) => s.id === "display-feedback-publicly",
+                    );
+                    if (feedbackSetting !== undefined) {
+                        displayFeedbackPublicly = feedbackSetting.value;
+                    }
+                } else if (typeof settingsData.settings === "object") {
+                    // Settings might be an object with setting IDs as keys
+                    if (
+                        settingsData.settings["display-feedback-publicly"] !==
+                        undefined
+                    ) {
+                        displayFeedbackPublicly =
+                            settingsData.settings["display-feedback-publicly"];
+                    }
+                }
+            }
+        } catch (err) {
+            // If loading settings fails, use default value (true)
+            displayFeedbackPublicly = true;
+        }
+    }
+
+    async function loadPosts() {
         try {
             loading = true;
             error = "";
             const data = await api.getEventsByCategory();
 
+            // Filter out feedback category if setting is disabled
+            let categoriesToInclude = { ...data.categories };
+            if (!displayFeedbackPublicly) {
+                const { feedback, ...restCategories } = categoriesToInclude;
+                categoriesToInclude = restCategories;
+            }
+
             // Combine all categorized events into one array dynamically
-            ideas = Object.values(data.categories)
+            const allPosts = Object.values(categoriesToInclude)
                 .flat()
                 .filter((e) => e && e.id);
 
+            posts = allPosts;
+
             // Sort by creation date
-            ideas = ideas.sort(
+            posts = posts.sort(
                 (a, b) =>
                     new Date(b.created_at).getTime() -
                     new Date(a.created_at).getTime(),
             );
             applyFilters();
         } catch (err) {
-            error = err instanceof Error ? err.message : "Failed to load ideas";
+            error = err instanceof Error ? err.message : "Failed to load posts";
         } finally {
             loading = false;
         }
@@ -85,75 +147,75 @@
         }
     }
 
-    function loadVotedIdeasFromStorage() {
+    function loadVotedPostsFromStorage() {
         try {
-            const stored = localStorage.getItem("votedIdeas");
+            const stored = localStorage.getItem("votedPosts");
             if (stored) {
                 const data = JSON.parse(stored);
-                votedIdeas = new Set(data);
+                votedPosts = new Set(data);
             }
         } catch (err) {
-            console.error("Failed to load voted ideas from storage:", err);
+            console.error("Failed to load voted posts from storage:", err);
         }
     }
 
-    function saveVotedIdeasToStorage() {
+    function saveVotedPostsToStorage() {
         try {
             localStorage.setItem(
-                "votedIdeas",
-                JSON.stringify(Array.from(votedIdeas)),
+                "votedPosts",
+                JSON.stringify(Array.from(votedPosts)),
             );
         } catch (err) {
-            console.error("Failed to save voted ideas:", err);
+            console.error("Failed to save voted posts:", err);
         }
     }
 
-    async function handleVote(ideaId: number) {
+    async function handleVote(postId: number) {
         try {
-            const result = await api.voteEvent(ideaId);
+            const result = await api.voteEvent(postId);
 
-            if (votedIdeas.has(ideaId)) {
-                votedIdeas.delete(ideaId);
+            if (votedPosts.has(postId)) {
+                votedPosts.delete(postId);
             } else {
-                votedIdeas.add(ideaId);
+                votedPosts.add(postId);
             }
-            saveVotedIdeasToStorage();
+            saveVotedPostsToStorage();
 
-            const idea = ideas.find((i) => i.id === ideaId);
-            if (idea) {
-                idea.votes = result.votes;
+            const post = posts.find((i) => i.id === postId);
+            if (post) {
+                post.votes = result.votes;
             }
             applyFilters();
 
-            delete voteErrors[ideaId];
+            delete voteErrors[postId];
         } catch (err) {
             const errorMessage =
                 err instanceof Error ? err.message : "Failed to vote";
-            voteErrors[ideaId] = errorMessage;
+            voteErrors[postId] = errorMessage;
             setTimeout(() => {
-                delete voteErrors[ideaId];
+                delete voteErrors[postId];
                 voteErrors = { ...voteErrors };
             }, 3000);
         }
     }
 
     function applyFilters() {
-        let result = [...ideas];
+        let result = [...posts];
 
         // Search filter
         if (searchQuery) {
             const query = searchQuery.toLowerCase();
             result = result.filter(
-                (idea) =>
-                    idea.title.toLowerCase().includes(query) ||
-                    idea.content?.toLowerCase().includes(query),
+                (post) =>
+                    post.title.toLowerCase().includes(query) ||
+                    post.content?.toLowerCase().includes(query),
             );
         }
 
         // Tag filter
         if (selectedTags.length > 0) {
-            result = result.filter((idea) =>
-                idea.tags?.some((tag) => selectedTags.includes(tag.id)),
+            result = result.filter((post) =>
+                post.tags?.some((tag) => selectedTags.includes(tag.id)),
             );
         }
 
@@ -168,19 +230,19 @@
             result.sort((a, b) => (b.votes || 0) - (a.votes || 0));
         }
 
-        filteredIdeas = result;
+        filteredPosts = result;
     }
 
     function groupByStatus() {
         const groups: Record<string, Event[]> = {};
 
         // Dynamically create groups based on actual statuses in the data
-        filteredIdeas.forEach((idea) => {
-            const status = idea.status || "Uncategorized";
+        filteredPosts.forEach((post) => {
+            const status = post.status || "Uncategorized";
             if (!groups[status]) {
                 groups[status] = [];
             }
-            groups[status].push(idea);
+            groups[status].push(post);
         });
 
         return groups;
@@ -206,55 +268,47 @@
 
     function openModal() {
         showModal = true;
-        ideaTitle = "";
-        ideaDescription = "";
-        selectedTagIds = [];
-        ideaError = "";
+        postTitle = "";
+        postDescription = "";
+        postError = "";
+        formStartTime = Date.now();
     }
 
     function closeModal() {
         showModal = false;
     }
 
-    function toggleTagSelection(tagId: number) {
-        if (selectedTagIds.includes(tagId)) {
-            selectedTagIds = selectedTagIds.filter((id) => id !== tagId);
-        } else {
-            selectedTagIds = [...selectedTagIds, tagId];
-        }
-    }
-
-    async function submitIdea() {
-        if (!ideaTitle.trim()) {
-            ideaError = "Please enter a title";
+    async function submitPost() {
+        if (!postTitle.trim()) {
+            postError = "Please enter a title";
             return;
         }
 
         try {
-            submittingIdea = true;
-            ideaError = "";
+            submittingPost = true;
+            postError = "";
 
-            await api.createEvent({
-                title: ideaTitle,
-                content: ideaDescription,
-                tag_ids: selectedTagIds,
-            });
+            await api.submitFeedback(
+                postTitle.trim(),
+                postDescription.trim(),
+                formStartTime,
+            );
 
             closeModal();
-            await loadIdeas();
+            await loadPosts();
         } catch (err) {
             const errorMessage =
-                err instanceof Error ? err.message : "Failed to submit idea";
-            ideaError = errorMessage;
+                err instanceof Error ? err.message : "Failed to submit post";
+            postError = errorMessage;
         } finally {
-            submittingIdea = false;
+            submittingPost = false;
         }
     }
 </script>
 
 <svelte:head>
-    <title>Ideas - Share Your Thoughts</title>
-    <meta name="description" content="Submit and explore innovative ideas" />
+    <title>Posts - Share Your Thoughts</title>
+    <meta name="description" content="Submit and explore posts" />
 </svelte:head>
 
 <div class="min-h-screen bg-background flex flex-col">
@@ -309,19 +363,19 @@
                     </div>
 
                     <!-- Filter -->
-                    <div class="relative">
+                    <div class="relative" bind:this={filterPopoverRef}>
                         <button
                             onclick={() => (showTagsPopover = !showTagsPopover)}
-                            class="inline-flex items-center justify-center gap-2 h-9 px-3 rounded-md border border-input bg-background hover:bg-accent hover:text-accent-foreground text-sm font-medium transition-colors {selectedTags.length >
+                            class="inline-flex items-center justify-center gap-1.5 h-9 px-3 rounded-md border border-input bg-background hover:bg-accent hover:text-accent-foreground text-sm font-medium transition-all {selectedTags.length >
                             0
-                                ? 'border-primary'
+                                ? 'border-primary bg-primary/5'
                                 : ''}"
                         >
-                            <FilterIcon class="h-4 w-4" />
-                            Filter
+                            <FilterIcon class="h-3.5 w-3.5" />
+                            <span class="hidden sm:inline">Filter</span>
                             {#if selectedTags.length > 0}
                                 <span
-                                    class="ml-0.5 flex h-5 w-5 items-center justify-center rounded-full bg-primary text-primary-foreground text-xs font-semibold"
+                                    class="flex h-4 w-4 items-center justify-center rounded-full bg-primary text-primary-foreground text-[10px] font-bold"
                                 >
                                     {selectedTags.length}
                                 </span>
@@ -330,53 +384,56 @@
 
                         {#if showTagsPopover}
                             <div
-                                class="absolute top-full mt-1 left-0 w-64 rounded-md border border-border bg-popover shadow-md z-50"
+                                class="absolute top-full mt-2 left-0 w-56 rounded-lg border border-border bg-popover shadow-lg z-50 overflow-hidden"
                             >
                                 <div
-                                    class="flex items-center justify-between px-3 py-2 border-b"
+                                    class="flex items-center justify-between px-3 py-2 border-b border-border/50 bg-muted/30"
                                 >
-                                    <p class="text-sm font-medium">
+                                    <p
+                                        class="text-xs font-semibold text-foreground flex items-center gap-1.5"
+                                    >
+                                        <TagIcon class="h-3 w-3" />
                                         Filter by tags
                                     </p>
                                     {#if selectedTags.length > 0}
                                         <button
                                             onclick={clearFilters}
-                                            class="text-xs text-muted-foreground hover:text-foreground"
+                                            class="text-xs text-primary hover:text-primary/80 font-medium transition-colors"
                                         >
-                                            Clear
+                                            Clear all
                                         </button>
                                     {/if}
                                 </div>
-                                <div class="p-2 max-h-64 overflow-y-auto">
+                                <div class="p-1.5 max-h-60 overflow-y-auto">
                                     {#if availableTags.length === 0}
                                         <p
-                                            class="text-sm text-muted-foreground py-6 text-center"
+                                            class="text-xs text-muted-foreground py-8 text-center"
                                         >
                                             No tags available
                                         </p>
                                     {:else}
-                                        <div class="space-y-1">
+                                        <div class="space-y-0.5">
                                             {#each availableTags as tag}
                                                 <button
                                                     onclick={() =>
                                                         toggleTag(tag.id)}
-                                                    class="w-full flex items-center justify-between px-2 py-2 rounded-sm hover:bg-accent text-sm transition-colors {selectedTags.includes(
+                                                    class="w-full flex items-center justify-between px-2.5 py-1.5 rounded-md hover:bg-accent text-xs transition-colors {selectedTags.includes(
                                                         tag.id,
                                                     )
-                                                        ? 'bg-accent'
+                                                        ? 'bg-accent/50'
                                                         : ''}"
                                                 >
                                                     <span
-                                                        class="text-foreground"
+                                                        class="text-foreground font-medium"
                                                         >{tag.name}</span
                                                     >
                                                     {#if selectedTags.includes(tag.id)}
                                                         <svg
-                                                            class="h-4 w-4 text-primary"
+                                                            class="h-3.5 w-3.5 text-primary"
                                                             fill="none"
                                                             viewBox="0 0 24 24"
                                                             stroke="currentColor"
-                                                            stroke-width="2"
+                                                            stroke-width="2.5"
                                                         >
                                                             <path
                                                                 stroke-linecap="round"
@@ -408,13 +465,13 @@
                         {/if}
                     </button>
 
-                    <!-- New Idea -->
+                    <!-- New Post -->
                     <button
                         onclick={openModal}
                         class="inline-flex items-center gap-2 h-9 px-4 rounded-md bg-primary text-primary-foreground hover:bg-primary/90 text-sm font-medium transition-colors"
                     >
                         <Plus class="h-4 w-4" />
-                        New Idea
+                        New Post
                     </button>
                 </div>
             </div>
@@ -432,14 +489,14 @@
             {:else if error}
                 <div class="max-w-2xl mx-auto text-center py-16">
                     <div
-                        class="bg-destructive/10 border border-destructive/20 rounded-lg p-8"
+                        class="p-4 bg-destructive/10 border border-destructive/20 rounded-lg text-destructive font-medium"
                     >
                         <p class="text-destructive text-sm font-medium">
-                            Error loading ideas: {error}
+                            {error}
                         </p>
                     </div>
                 </div>
-            {:else if filteredIdeas.length === 0}
+            {:else if filteredPosts.length === 0}
                 <div class="text-center py-24 max-w-md mx-auto">
                     <div
                         class="inline-flex items-center justify-center w-12 h-12 rounded-full bg-muted mb-3"
@@ -447,12 +504,12 @@
                         <Search class="h-5 w-5 text-muted-foreground" />
                     </div>
                     <h3 class="text-base font-semibold mb-1.5">
-                        No ideas found
+                        No posts found
                     </h3>
                     <p class="text-sm text-muted-foreground mb-4">
                         {searchQuery || selectedTags.length > 0
                             ? "Try adjusting your filters or search query"
-                            : "No ideas have been submitted yet"}
+                            : "No posts have been submitted yet"}
                     </p>
                     {#if searchQuery || selectedTags.length > 0}
                         <button
@@ -464,37 +521,37 @@
                     {/if}
                 </div>
             {:else if viewMode === "list"}
-                <!-- Ideas List -->
+                <!-- List View -->
                 <div class="space-y-3">
-                    {#each filteredIdeas as idea}
-                        {@const parsedIdea = parseEvent(idea)}
+                    {#each filteredPosts as post}
+                        {@const parsedPost = parseEvent(post)}
                         <article
                             class="relative bg-card border border-border rounded-lg p-4 hover:shadow-sm hover:border-border/80 transition-all group"
                         >
-                            {#if idea.status}
+                            {#if post.status}
                                 <span
                                     class="absolute top-3 right-3 px-2 py-0.5 rounded bg-primary/10 text-primary border border-primary/20 font-bold uppercase text-[10px] tracking-wider"
                                 >
-                                    {idea.status}
+                                    {post.status}
                                 </span>
                             {/if}
                             <div class="flex gap-4">
                                 <!-- Vote Button (Left Side) -->
                                 <div class="flex-shrink-0">
                                     <button
-                                        onclick={() => handleVote(idea.id)}
-                                        class="flex flex-col items-center gap-0.5 px-2 py-1.5 rounded-md transition-all {votedIdeas.has(
-                                            idea.id,
+                                        onclick={() => handleVote(post.id)}
+                                        class="flex flex-col items-center gap-0.5 px-2 py-1.5 rounded-md transition-all {votedPosts.has(
+                                            post.id,
                                         )
                                             ? 'bg-primary text-primary-foreground shadow-sm'
                                             : 'bg-muted text-muted-foreground hover:bg-muted/80'}"
-                                        title={votedIdeas.has(idea.id)
+                                        title={votedPosts.has(post.id)
                                             ? "Remove vote"
-                                            : "Vote for this idea"}
+                                            : "Vote for this post"}
                                     >
                                         <ThumbsUp class="h-3.5 w-3.5" />
                                         <span class="text-xs font-medium"
-                                            >{idea.votes || 0}</span
+                                            >{post.votes || 0}</span
                                         >
                                     </button>
                                 </div>
@@ -506,29 +563,29 @@
                                         <h3
                                             class="font-semibold text-base mb-1.5 leading-tight"
                                         >
-                                            {idea.title}
+                                            {post.title}
                                         </h3>
-                                        {#if idea.date}
+                                        {#if post.date}
                                             <time
                                                 class="text-xs text-muted-foreground font-medium"
                                             >
-                                                {formatDate(idea.date)}
+                                                {formatDate(post.date)}
                                             </time>
                                         {/if}
                                     </div>
 
-                                    {#if voteErrors[idea.id]}
+                                    {#if voteErrors[post.id]}
                                         <div
-                                            class="mb-2 p-2 bg-destructive/10 border border-destructive/20 rounded text-xs text-destructive"
+                                            class="text-xs text-destructive mt-1 p-2 bg-destructive/10 rounded"
                                         >
-                                            {voteErrors[idea.id]}
+                                            {voteErrors[post.id]}
                                         </div>
                                     {/if}
 
                                     <!-- Tags -->
-                                    {#if idea.tags && Array.isArray(idea.tags) && idea.tags.length > 0}
+                                    {#if post.tags && Array.isArray(post.tags) && post.tags.length > 0}
                                         <div class="flex flex-wrap gap-1 mb-2">
-                                            {#each idea.tags as tag}
+                                            {#each post.tags as tag}
                                                 <Badge
                                                     variant="secondary"
                                                     class="text-xs"
@@ -541,20 +598,20 @@
                                     {/if}
 
                                     <!-- Content -->
-                                    {#if idea.content}
+                                    {#if post.content}
                                         <div
-                                            class="prose prose-sm dark:prose-invert mb-3 text-muted-foreground text-sm"
+                                            class="prose prose-sm max-w-none text-muted-foreground line-clamp-3 mb-2"
                                         >
-                                            {@html markdownToHtml(idea.content)}
+                                            {@html markdownToHtml(post.content)}
                                         </div>
                                     {/if}
 
                                     <!-- Media -->
-                                    {#if parsedIdea.media.length > 0}
+                                    {#if parsedPost.media.length > 0}
                                         <div class="mb-2">
                                             <img
-                                                src={parsedIdea.media[0]}
-                                                alt={idea.title}
+                                                src={parsedPost.media[0]}
+                                                alt={post.title}
                                                 class="w-full max-w-2xl h-auto object-cover rounded-md"
                                             />
                                         </div>
@@ -566,7 +623,7 @@
                                     >
                                         <span>
                                             Posted on {new Date(
-                                                idea.created_at,
+                                                post.created_at,
                                             ).toLocaleDateString("en-US", {
                                                 year: "numeric",
                                                 month: "long",
@@ -583,13 +640,13 @@
         </div>
 
         <!-- Kanban Full Width Container -->
-        {#if viewMode === "kanban" && !loading && !error && filteredIdeas.length > 0}
-            {@const groupedIdeas = groupByStatus()}
+        {#if viewMode === "kanban" && !loading && !error && filteredPosts.length > 0}
+            {@const groupedPosts = groupByStatus()}
             <div
                 class="overflow-x-auto h-[calc(100svh-150px)] w-full px-4 sm:px-6 lg:px-8"
             >
                 <div class="flex gap-3 h-full min-w-max pb-4">
-                    {#each Object.entries(groupedIdeas) as [status, statusIdeas]}
+                    {#each Object.entries(groupedPosts) as [status, statusPosts]}
                         <div class="flex-shrink-0 w-72 h-full flex flex-col">
                             <div
                                 class="bg-muted/30 border border-border rounded-lg h-full flex flex-col"
@@ -603,16 +660,16 @@
                                         {status}
                                     </h3>
                                     <span
-                                        class="text-xs font-semibold text-muted-foreground bg-background px-1.5 py-0.5 rounded"
+                                        class="px-1.5 py-0.5 rounded text-xs bg-muted text-muted-foreground font-medium"
                                     >
-                                        {statusIdeas.length}
+                                        {statusPosts.length}
                                     </span>
                                 </div>
                                 <div
                                     class="p-2 space-y-2 overflow-y-auto flex-1"
                                 >
-                                    {#each statusIdeas as idea}
-                                        {@const parsedIdea = parseEvent(idea)}
+                                    {#each statusPosts as post}
+                                        {@const parsedPost = parseEvent(post)}
                                         <article
                                             class="bg-card rounded-md border border-border p-2 hover:shadow-sm hover:border-border/80 transition-all"
                                         >
@@ -621,9 +678,9 @@
                                             >
                                                 <button
                                                     onclick={() =>
-                                                        handleVote(idea.id)}
-                                                    class="flex-shrink-0 flex flex-col items-center gap-0.5 px-1.5 py-1 rounded-md transition-all {votedIdeas.has(
-                                                        idea.id,
+                                                        handleVote(post.id)}
+                                                    class="flex-shrink-0 flex flex-col items-center gap-0.5 px-1.5 py-1 rounded-md transition-all {votedPosts.has(
+                                                        post.id,
                                                     )
                                                         ? 'bg-primary text-primary-foreground shadow-sm'
                                                         : 'bg-muted text-muted-foreground hover:bg-muted/80'}"
@@ -631,32 +688,33 @@
                                                     <ThumbsUp class="h-3 w-3" />
                                                     <span
                                                         class="text-[10px] font-bold"
-                                                        >{idea.votes || 0}</span
+                                                        >{post.votes || 0}</span
                                                     >
                                                 </button>
                                                 <div class="flex-1 min-w-0">
                                                     <h4
                                                         class="font-semibold text-sm mb-1 leading-tight"
                                                     >
-                                                        {idea.title}
+                                                        {post.title}
                                                     </h4>
-                                                    {#if idea.date}
+                                                    {#if post.date}
                                                         <time
                                                             class="text-xs text-muted-foreground font-medium"
                                                         >
                                                             {formatDate(
-                                                                idea.date,
+                                                                post.date,
                                                             )}
                                                         </time>
                                                     {/if}
                                                 </div>
                                             </div>
 
-                                            {#if idea.tags && Array.isArray(idea.tags) && idea.tags.length > 0}
+                                            <!-- Tags -->
+                                            {#if post.tags && Array.isArray(post.tags) && post.tags.length > 0}
                                                 <div
-                                                    class="flex flex-wrap gap-1 mb-1.5"
+                                                    class="flex flex-wrap gap-1 mt-1.5"
                                                 >
-                                                    {#each idea.tags as tag}
+                                                    {#each post.tags as tag}
                                                         <Badge
                                                             variant="secondary"
                                                             class="text-xs"
@@ -668,23 +726,23 @@
                                                 </div>
                                             {/if}
 
-                                            {#if idea.content}
+                                            {#if post.content}
                                                 <div
                                                     class="prose prose-sm dark:prose-invert text-xs text-muted-foreground/80 line-clamp-2"
                                                 >
                                                     {@html markdownToHtml(
-                                                        idea.content,
+                                                        post.content,
                                                     )}
                                                 </div>
                                             {/if}
                                         </article>
                                     {/each}
 
-                                    {#if statusIdeas.length === 0}
+                                    {#if statusPosts.length === 0}
                                         <p
                                             class="text-xs text-muted-foreground text-center py-8"
                                         >
-                                            No items
+                                            No posts
                                         </p>
                                     {/if}
                                 </div>
@@ -713,7 +771,7 @@
             <div
                 class="flex items-center justify-between px-5 py-4 border-b border-border"
             >
-                <h2 class="text-lg font-semibold">New Idea</h2>
+                <h2 class="text-lg font-semibold">New Post</h2>
                 <button
                     onclick={closeModal}
                     class="h-8 w-8 inline-flex items-center justify-center rounded-md text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
@@ -725,29 +783,29 @@
             <form
                 onsubmit={(e) => {
                     e.preventDefault();
-                    submitIdea();
+                    submitPost();
                 }}
                 class="p-5 space-y-4"
             >
-                {#if ideaError}
+                {#if postError}
                     <div
                         class="p-2.5 bg-destructive/10 border border-destructive/20 rounded-md text-xs text-destructive font-medium"
                     >
-                        {ideaError}
+                        {postError}
                     </div>
                 {/if}
 
                 <div class="space-y-1.5">
                     <label
-                        for="idea-title"
+                        for="post-title"
                         class="text-sm font-medium text-foreground"
                     >
                         Title
                     </label>
                     <Input
-                        id="idea-title"
-                        bind:value={ideaTitle}
-                        placeholder="What's your idea?"
+                        id="post-title"
+                        bind:value={postTitle}
+                        placeholder="What's on your mind?"
                         class="h-10"
                         required
                     />
@@ -755,44 +813,19 @@
 
                 <div class="space-y-1.5">
                     <label
-                        for="idea-description"
+                        for="post-description"
                         class="text-sm font-medium text-foreground"
                     >
                         Description
                     </label>
                     <Textarea
-                        id="idea-description"
-                        bind:value={ideaDescription}
+                        id="post-description"
+                        bind:value={postDescription}
                         placeholder="Provide more details..."
                         class="resize-none"
                         rows={4}
                     />
                 </div>
-
-                {#if availableTags.length > 0}
-                    <div class="space-y-1.5">
-                        <label class="text-sm font-medium text-foreground">
-                            Tags <span class="text-muted-foreground font-normal"
-                                >(optional)</span
-                            >
-                        </label>
-                        <div class="flex flex-wrap gap-1.5">
-                            {#each availableTags as tag}
-                                <button
-                                    type="button"
-                                    onclick={() => toggleTagSelection(tag.id)}
-                                    class="inline-flex items-center px-2.5 py-1 rounded-md text-xs font-medium transition-colors {selectedTagIds.includes(
-                                        tag.id,
-                                    )
-                                        ? 'bg-primary text-primary-foreground'
-                                        : 'bg-muted text-muted-foreground hover:bg-muted/80'}"
-                                >
-                                    {tag.name}
-                                </button>
-                            {/each}
-                        </div>
-                    </div>
-                {/if}
 
                 <div class="flex justify-end gap-2 pt-2">
                     <button
@@ -804,10 +837,10 @@
                     </button>
                     <button
                         type="submit"
-                        disabled={submittingIdea}
+                        disabled={submittingPost}
                         class="px-4 h-9 inline-flex items-center justify-center gap-2 rounded-md bg-primary text-primary-foreground hover:bg-primary/90 text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                     >
-                        {#if submittingIdea}
+                        {#if submittingPost}
                             <div
                                 class="h-3.5 w-3.5 animate-spin border-2 border-primary-foreground border-t-transparent rounded-full"
                             ></div>

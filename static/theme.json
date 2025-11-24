@@ -4,17 +4,28 @@
   "version": "1.0.0",
   "description": "A clean and minimal idea management board with list and kanban views",
   "author": "ShipShipShip",
+  "settings": [
+    {
+      "id": "display-feedback-publicly",
+      "label": "Display Feedback Publicly",
+      "description": "Show user-submitted feedback on the public page",
+      "type": "boolean",
+      "default": true
+    }
+  ],
   "categories": [
     {
       "id": "displayed-statuses",
       "label": "Status Categories",
       "description": "Organize ideas by their current status in the development pipeline",
+      "multiple": true,
       "order": 1
     },
     {
       "id": "feedback",
       "label": "Feedback",
       "description": "User feedback and suggestions. This is the status where submitted feedback is added.",
+      "multiple": false,
       "order": 2
     }
   ]
