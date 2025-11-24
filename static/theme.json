@@ -1,0 +1,21 @@
+{
+  "id": "echo",
+  "name": "Echo",
+  "version": "1.0.0",
+  "description": "A clean and minimal idea management board with list and kanban views",
+  "author": "ShipShipShip",
+  "categories": [
+    {
+      "id": "displayed-statuses",
+      "label": "Status Categories",
+      "description": "Organize ideas by their current status in the development pipeline",
+      "order": 1
+    },
+    {
+      "id": "feedback",
+      "label": "Feedback",
+      "description": "User feedback and suggestions. This is the status where submitted feedback is added.",
+      "order": 2
+    }
+  ]
+}
