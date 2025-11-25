@@ -4,7 +4,6 @@
   "private": true,
   "version": "1.0.0",
   "type": "module",
-  "displayName": "Echo",
   "author": "ShipShipShip",
   "keywords": [
     "shipshipship",
@@ -13,16 +12,6 @@
     "cards",
     "voting"
   ],
-  "shipshipship": {
-    "demoUrl": "https://echo-demo.yoursite.com",
-    "features": [
-      "Responsive",
-      "Dark-mode",
-      "List Layout",
-      "Advanced Filtering",
-      "Voting System"
-    ]
-  },
   "scripts": {
     "dev": "vite dev",
     "dev:host": "vite dev --host",
@@ -41,6 +30,8 @@
     "config:show": "node -e \"console.log('VITE_ADMIN_API_URL:', process.env.VITE_ADMIN_API_URL || '(not set)');\""
   },
   "dependencies": {
+    "@iconify-json/fluent-emoji-flat": "^1.2.5",
+    "@iconify/svelte": "^5.1.0",
     "@tiptap/core": "^3.2.0",
     "@tiptap/extension-image": "^3.2.0",
     "@tiptap/extension-link": "^3.2.0",

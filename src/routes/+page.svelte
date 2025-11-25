@@ -5,11 +5,11 @@
     import { parseEvent, markdownToHtml, formatDate } from "$lib/utils";
     import Header from "$lib/components/Header.svelte";
     import Footer from "$lib/components/Footer.svelte";
+    import ReactionPicker from "$lib/components/ReactionPicker.svelte";
     import Badge from "$lib/components/ui/badge.svelte";
     import Input from "$lib/components/ui/input.svelte";
     import Textarea from "$lib/components/ui/textarea.svelte";
     import {
-        ThumbsUp,
         Search,
         Plus,
         X,
@@ -23,7 +23,6 @@
 
     // Data state
     let posts = $state<Event[]>([]);
-    let filteredPosts = $state<Event[]>([]);
     let loading = $state(true);
     let error = $state("");
 
@@ -39,10 +38,6 @@
     // Theme settings
     let displayFeedbackPublicly = $state(true);
 
-    // Vote state
-    let votedPosts = $state(new Set<number>());
-    let voteErrors = $state<Record<number, string>>({});
-
     // Modal state
     let showModal = $state(false);
     let postTitle = $state("");
@@ -55,7 +50,6 @@
         await loadThemeSettings();
         await loadPosts();
         await loadTags();
-        loadVotedPostsFromStorage();
 
         // Handle click outside to close filter popover
         const handleClickOutside = (event: MouseEvent) => {
@@ -111,17 +105,19 @@
             error = "";
             const data = await api.getEventsByCategory();
 
-            // Filter out feedback category if setting is disabled
-            let categoriesToInclude = { ...data.categories };
-            if (!displayFeedbackPublicly) {
-                const { feedback, ...restCategories } = categoriesToInclude;
-                categoriesToInclude = restCategories;
-            }
+            // Get all events from the categories
+            let allPosts: Event[] = [];
+            if (data.categories) {
+                // Get events from "displayed-statuses" category
+                if (data.categories["displayed-statuses"]) {
+                    allPosts = [...data.categories["displayed-statuses"]];
+                }
 
-            // Combine all categorized events into one array dynamically
-            const allPosts = Object.values(categoriesToInclude)
-                .flat()
-                .filter((e) => e && e.id);
+                // Handle feedback category based on displayFeedbackPublicly setting
+                if (displayFeedbackPublicly && data.categories["feedback"]) {
+                    allPosts = [...allPosts, ...data.categories["feedback"]];
+                }
+            }
 
             posts = allPosts;
 
@@ -131,7 +127,6 @@
                     new Date(b.created_at).getTime() -
                     new Date(a.created_at).getTime(),
             );
-            applyFilters();
         } catch (err) {
             error = err instanceof Error ? err.message : "Failed to load posts";
         } finally {
@@ -147,59 +142,8 @@
         }
     }
 
-    function loadVotedPostsFromStorage() {
-        try {
-            const stored = localStorage.getItem("votedPosts");
-            if (stored) {
-                const data = JSON.parse(stored);
-                votedPosts = new Set(data);
-            }
-        } catch (err) {
-            console.error("Failed to load voted posts from storage:", err);
-        }
-    }
-
-    function saveVotedPostsToStorage() {
-        try {
-            localStorage.setItem(
-                "votedPosts",
-                JSON.stringify(Array.from(votedPosts)),
-            );
-        } catch (err) {
-            console.error("Failed to save voted posts:", err);
-        }
-    }
-
-    async function handleVote(postId: number) {
-        try {
-            const result = await api.voteEvent(postId);
-
-            if (votedPosts.has(postId)) {
-                votedPosts.delete(postId);
-            } else {
-                votedPosts.add(postId);
-            }
-            saveVotedPostsToStorage();
-
-            const post = posts.find((i) => i.id === postId);
-            if (post) {
-                post.votes = result.votes;
-            }
-            applyFilters();
-
-            delete voteErrors[postId];
-        } catch (err) {
-            const errorMessage =
-                err instanceof Error ? err.message : "Failed to vote";
-            voteErrors[postId] = errorMessage;
-            setTimeout(() => {
-                delete voteErrors[postId];
-                voteErrors = { ...voteErrors };
-            }, 3000);
-        }
-    }
-
-    function applyFilters() {
+    // Use $derived to reactively compute filtered posts
+    let filteredPosts = $derived.by(() => {
         let result = [...posts];
 
         // Search filter
@@ -227,11 +171,15 @@
                     new Date(a.created_at).getTime(),
             );
         } else if (sortBy === "popular") {
-            result.sort((a, b) => (b.votes || 0) - (a.votes || 0));
+            result.sort(
+                (a, b) =>
+                    (b.reaction_summary?.total_count || 0) -
+                    (a.reaction_summary?.total_count || 0),
+            );
         }
 
-        filteredPosts = result;
-    }
+        return result;
+    });
 
     function groupByStatus() {
         const groups: Record<string, Event[]> = {};
@@ -259,12 +207,7 @@
     function clearFilters() {
         searchQuery = "";
         selectedTags = [];
-        applyFilters();
     }
-
-    $effect(() => {
-        applyFilters();
-    });
 
     function openModal() {
         showModal = true;
@@ -535,28 +478,8 @@
                                     {post.status}
                                 </span>
                             {/if}
-                            <div class="flex gap-4">
-                                <!-- Vote Button (Left Side) -->
-                                <div class="flex-shrink-0">
-                                    <button
-                                        onclick={() => handleVote(post.id)}
-                                        class="flex flex-col items-center gap-0.5 px-2 py-1.5 rounded-md transition-all {votedPosts.has(
-                                            post.id,
-                                        )
-                                            ? 'bg-primary text-primary-foreground shadow-sm'
-                                            : 'bg-muted text-muted-foreground hover:bg-muted/80'}"
-                                        title={votedPosts.has(post.id)
-                                            ? "Remove vote"
-                                            : "Vote for this post"}
-                                    >
-                                        <ThumbsUp class="h-3.5 w-3.5" />
-                                        <span class="text-xs font-medium"
-                                            >{post.votes || 0}</span
-                                        >
-                                    </button>
-                                </div>
-
-                                <!-- Content (Right Side) -->
+                            <div class="flex flex-col">
+                                <!-- Content -->
                                 <div class="flex-1 min-w-0">
                                     <!-- Header -->
                                     <div class="mb-2">
@@ -573,14 +496,6 @@
                                             </time>
                                         {/if}
                                     </div>
-
-                                    {#if voteErrors[post.id]}
-                                        <div
-                                            class="text-xs text-destructive mt-1 p-2 bg-destructive/10 rounded"
-                                        >
-                                            {voteErrors[post.id]}
-                                        </div>
-                                    {/if}
 
                                     <!-- Tags -->
                                     {#if post.tags && Array.isArray(post.tags) && post.tags.length > 0}
@@ -619,7 +534,7 @@
 
                                     <!-- Footer -->
                                     <div
-                                        class="flex items-center text-xs text-muted-foreground pt-2 mt-2 border-t border-border"
+                                        class="flex items-center justify-between text-xs text-muted-foreground pt-2 mt-2 border-t border-border"
                                     >
                                         <span>
                                             Posted on {new Date(
@@ -630,6 +545,15 @@
                                                 day: "numeric",
                                             })}
                                         </span>
+                                        <!-- Reactions (Bottom Right) -->
+                                        <div class="flex-shrink-0">
+                                            <ReactionPicker
+                                                eventId={post.id}
+                                                variant="popover"
+                                                size="sm"
+                                                initialReactions={post.reaction_summary}
+                                            />
+                                        </div>
                                     </div>
                                 </div>
                             </div>
@@ -673,25 +597,8 @@
                                         <article
                                             class="bg-card rounded-md border border-border p-2 hover:shadow-sm hover:border-border/80 transition-all"
                                         >
-                                            <div
-                                                class="flex items-start gap-2 mb-1.5"
-                                            >
-                                                <button
-                                                    onclick={() =>
-                                                        handleVote(post.id)}
-                                                    class="flex-shrink-0 flex flex-col items-center gap-0.5 px-1.5 py-1 rounded-md transition-all {votedPosts.has(
-                                                        post.id,
-                                                    )
-                                                        ? 'bg-primary text-primary-foreground shadow-sm'
-                                                        : 'bg-muted text-muted-foreground hover:bg-muted/80'}"
-                                                >
-                                                    <ThumbsUp class="h-3 w-3" />
-                                                    <span
-                                                        class="text-[10px] font-bold"
-                                                        >{post.votes || 0}</span
-                                                    >
-                                                </button>
-                                                <div class="flex-1 min-w-0">
+                                            <div class="flex flex-col gap-2">
+                                                <div class="flex-1">
                                                     <h4
                                                         class="font-semibold text-sm mb-1 leading-tight"
                                                     >
@@ -707,34 +614,46 @@
                                                         </time>
                                                     {/if}
                                                 </div>
+
+                                                <!-- Tags -->
+                                                {#if post.tags && Array.isArray(post.tags) && post.tags.length > 0}
+                                                    <div
+                                                        class="flex flex-wrap gap-1"
+                                                    >
+                                                        {#each post.tags as tag}
+                                                            <Badge
+                                                                variant="secondary"
+                                                                class="text-xs"
+                                                                style="background-color: {tag.color}20; color: {tag.color};"
+                                                            >
+                                                                {tag.name}
+                                                            </Badge>
+                                                        {/each}
+                                                    </div>
+                                                {/if}
+
+                                                {#if post.content}
+                                                    <div
+                                                        class="prose prose-sm dark:prose-invert text-xs text-muted-foreground/80 line-clamp-2"
+                                                    >
+                                                        {@html markdownToHtml(
+                                                            post.content,
+                                                        )}
+                                                    </div>
+                                                {/if}
+
+                                                <!-- Reactions (Bottom Right) -->
+                                                <div
+                                                    class="flex justify-end pt-1 border-t border-border/50"
+                                                >
+                                                    <ReactionPicker
+                                                        eventId={post.id}
+                                                        variant="popover"
+                                                        size="sm"
+                                                        initialReactions={post.reaction_summary}
+                                                    />
+                                                </div>
                                             </div>
-
-                                            <!-- Tags -->
-                                            {#if post.tags && Array.isArray(post.tags) && post.tags.length > 0}
-                                                <div
-                                                    class="flex flex-wrap gap-1 mt-1.5"
-                                                >
-                                                    {#each post.tags as tag}
-                                                        <Badge
-                                                            variant="secondary"
-                                                            class="text-xs"
-                                                            style="background-color: {tag.color}20; color: {tag.color};"
-                                                        >
-                                                            {tag.name}
-                                                        </Badge>
-                                                    {/each}
-                                                </div>
-                                            {/if}
-
-                                            {#if post.content}
-                                                <div
-                                                    class="prose prose-sm dark:prose-invert text-xs text-muted-foreground/80 line-clamp-2"
-                                                >
-                                                    {@html markdownToHtml(
-                                                        post.content,
-                                                    )}
-                                                </div>
-                                            {/if}
                                         </article>
                                     {/each}
 

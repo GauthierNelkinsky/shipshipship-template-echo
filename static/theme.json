@@ -4,6 +4,18 @@
   "version": "1.0.0",
   "description": "A clean and minimal idea management board with list and kanban views",
   "author": "ShipShipShip",
+  "demoUrl": "https://demo.shipshipship.com",
+  "features": [
+    "Responsive",
+    "Dark-mode",
+    "List Layout",
+    "Advanced Filtering",
+    "Voting System"
+  ],
+  "technologies": ["SvelteKit", "TypeScript", "Tailwind CSS"],
+  "compatibility": {
+    "minVersion": "1.2.2"
+  },
   "settings": [
     {
       "id": "display-feedback-publicly",
