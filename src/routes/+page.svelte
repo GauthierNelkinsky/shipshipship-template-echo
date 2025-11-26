@@ -1,7 +1,7 @@
 <script lang="ts">
     import { onMount } from "svelte";
     import { api } from "$lib/api";
-    import type { Event, Tag } from "$lib/types";
+    import type { Event, Tag, EventStatus } from "$lib/types";
     import { parseEvent, markdownToHtml, formatDate } from "$lib/utils";
     import Header from "$lib/components/Header.svelte";
     import Footer from "$lib/components/Footer.svelte";
@@ -25,6 +25,7 @@
     let posts = $state<Event[]>([]);
     let loading = $state(true);
     let error = $state("");
+    let allStatuses = $state<string[]>([]);
 
     // Filter state
     let searchQuery = $state("");
@@ -73,27 +74,27 @@
         try {
             const settingsData = await api.getThemeSettings();
 
-            if (settingsData.settings) {
-                // Check if settings is an object or array
-                if (Array.isArray(settingsData.settings)) {
-                    const feedbackSetting = settingsData.settings.find(
-                        (s) => s.id === "display-feedback-publicly",
-                    );
-                    if (feedbackSetting !== undefined) {
-                        displayFeedbackPublicly = feedbackSetting.value;
-                    }
-                } else if (typeof settingsData.settings === "object") {
-                    // Settings might be an object with setting IDs as keys
-                    if (
-                        settingsData.settings["display-feedback-publicly"] !==
-                        undefined
-                    ) {
-                        displayFeedbackPublicly =
-                            settingsData.settings["display-feedback-publicly"];
-                    }
+            if (
+                settingsData.settings &&
+                typeof settingsData.settings === "object"
+            ) {
+                // Extract feedback display setting
+                if (
+                    settingsData.settings["display-feedback-publicly"] !==
+                    undefined
+                ) {
+                    displayFeedbackPublicly =
+                        settingsData.settings["display-feedback-publicly"];
+                }
+
+                // Extract statuses for displayed-statuses category
+                if (settingsData.settings["displayed-statuses-statuses"]) {
+                    allStatuses =
+                        settingsData.settings["displayed-statuses-statuses"];
                 }
             }
         } catch (err) {
+            console.error("Error loading theme settings:", err);
             // If loading settings fails, use default value (true)
             displayFeedbackPublicly = true;
         }
@@ -119,14 +120,18 @@
                 }
             }
 
-            posts = allPosts;
+            // Fetch reaction summaries for all events
+            const reactionPromises = allPosts.map(async (post) => {
+                try {
+                    const reactions = await api.getEventReactions(post.id);
+                    return { ...post, reaction_summary: reactions } as Event;
+                } catch {
+                    // If fetching reactions fails, return post without reactions
+                    return post;
+                }
+            });
 
-            // Sort by creation date
-            posts = posts.sort(
-                (a, b) =>
-                    new Date(b.created_at).getTime() -
-                    new Date(a.created_at).getTime(),
-            );
+            posts = await Promise.all(reactionPromises);
         } catch (err) {
             error = err instanceof Error ? err.message : "Failed to load posts";
         } finally {
@@ -182,11 +187,19 @@
     });
 
     function groupByStatus() {
+        // Initialize groups with all statuses from API
         const groups: Record<string, Event[]> = {};
 
-        // Dynamically create groups based on actual statuses in the data
+        // Initialize groups for all statuses
+        allStatuses.forEach((status) => {
+            groups[status] = [];
+        });
+
+        // Populate groups with posts
         filteredPosts.forEach((post) => {
-            const status = post.status || "Uncategorized";
+            const status = post.status;
+
+            // Initialize group if it doesn't exist (for any unexpected statuses)
             if (!groups[status]) {
                 groups[status] = [];
             }
@@ -262,22 +275,8 @@
             class="w-full max-w-[1200px] px-4 sm:px-6 lg:px-8 mx-auto sm:w-[70%] flex flex-col gap-4"
         >
             <!-- Filters and Search -->
-            <div
-                class="flex flex-col sm:flex-row gap-2 items-start sm:items-center justify-between"
-            >
-                <!-- Search (Left Side) -->
-                <div class="relative w-full sm:w-56">
-                    <Search
-                        class="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground"
-                    />
-                    <Input
-                        bind:value={searchQuery}
-                        placeholder="Search ideas..."
-                        class="pl-9 h-9"
-                    />
-                </div>
-
-                <!-- Filters (Right Side) -->
+            <div class="flex flex-col gap-3">
+                <!-- First Row: Sort, View Toggle, and Create -->
                 <div class="flex flex-wrap items-center gap-2">
                     <!-- Sort -->
                     <div
@@ -303,6 +302,51 @@
                             <TrendingUp class="h-3.5 w-3.5" />
                             Popular
                         </button>
+                    </div>
+
+                    <!-- Spacer -->
+                    <div class="flex-1 min-w-4"></div>
+
+                    <!-- View Toggle -->
+                    <button
+                        onclick={() =>
+                            (viewMode =
+                                viewMode === "list" ? "kanban" : "list")}
+                        class="inline-flex items-center justify-center gap-2 h-9 px-3 rounded-md border border-input bg-background hover:bg-accent hover:text-accent-foreground text-sm font-medium transition-colors"
+                    >
+                        {#if viewMode === "list"}
+                            <LayoutGrid class="h-4 w-4" />
+                            <span>Board View</span>
+                        {:else}
+                            <List class="h-4 w-4" />
+                            <span>List View</span>
+                        {/if}
+                    </button>
+
+                    <!-- New Post -->
+                    <button
+                        onclick={openModal}
+                        class="inline-flex items-center gap-2 h-9 px-4 rounded-md bg-primary text-primary-foreground hover:bg-primary/90 text-sm font-medium transition-colors"
+                    >
+                        <Plus class="h-4 w-4" />
+                        New Post
+                    </button>
+                </div>
+
+                <!-- Second Row: Search and Filter -->
+                <div
+                    class="flex flex-col sm:flex-row gap-2 items-start sm:items-center"
+                >
+                    <!-- Search -->
+                    <div class="relative w-full sm:flex-1">
+                        <Search
+                            class="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground"
+                        />
+                        <Input
+                            bind:value={searchQuery}
+                            placeholder="Search ideas..."
+                            class="pl-9 h-9"
+                        />
                     </div>
 
                     <!-- Filter -->
@@ -393,29 +437,6 @@
                             </div>
                         {/if}
                     </div>
-
-                    <!-- View Toggle -->
-                    <button
-                        onclick={() =>
-                            (viewMode =
-                                viewMode === "list" ? "kanban" : "list")}
-                        class="inline-flex items-center justify-center gap-2 h-9 px-3 rounded-md border border-input bg-background hover:bg-accent hover:text-accent-foreground text-sm font-medium transition-colors"
-                    >
-                        {#if viewMode === "list"}
-                            <LayoutGrid class="h-4 w-4" />
-                        {:else}
-                            <List class="h-4 w-4" />
-                        {/if}
-                    </button>
-
-                    <!-- New Post -->
-                    <button
-                        onclick={openModal}
-                        class="inline-flex items-center gap-2 h-9 px-4 rounded-md bg-primary text-primary-foreground hover:bg-primary/90 text-sm font-medium transition-colors"
-                    >
-                        <Plus class="h-4 w-4" />
-                        New Post
-                    </button>
                 </div>
             </div>
 

@@ -139,7 +139,9 @@ class ApiClient {
 
   async getThemeSettings() {
     return this.request<{
-      settings: Array<{ id: string; value: any }>;
+      success: boolean;
+      theme_id: string;
+      settings: { [key: string]: any };
     }>("/theme/settings");
   }
 
