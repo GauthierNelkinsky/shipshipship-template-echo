@@ -3,6 +3,9 @@
     import { api } from "$lib/api";
     import type { Event, Tag, EventStatus } from "$lib/types";
     import { parseEvent, markdownToHtml, formatDate } from "$lib/utils";
+    import { themeSettings } from "$lib/stores/themeSettings";
+    import * as m from "$lib/paraglide/messages";
+    import { getLocale } from "$lib/paraglide/runtime";
     import Header from "$lib/components/Header.svelte";
     import Footer from "$lib/components/Footer.svelte";
     import ReactionPicker from "$lib/components/ReactionPicker.svelte";
@@ -19,13 +22,14 @@
         List,
         LayoutGrid,
         Tag as TagIcon,
+        ChevronDown,
+        ChevronUp,
     } from "lucide-svelte";
 
     // Data state
     let posts = $state<Event[]>([]);
     let loading = $state(true);
     let error = $state("");
-    let allStatuses = $state<string[]>([]);
 
     // Filter state
     let searchQuery = $state("");
@@ -35,9 +39,45 @@
     let showTagsPopover = $state(false);
     let viewMode = $state<"list" | "kanban">("list");
     let filterPopoverRef = $state<HTMLDivElement | null>(null);
+    let expandedCards = $state<Set<number>>(new Set());
+    let clampedCards = $state<Set<number>>(new Set());
 
-    // Theme settings
-    let displayFeedbackPublicly = $state(true);
+    function toggleCardExpand(postId: number) {
+        if (expandedCards.has(postId)) {
+            expandedCards.delete(postId);
+            expandedCards = new Set(expandedCards);
+        } else {
+            expandedCards.add(postId);
+            expandedCards = new Set(expandedCards);
+        }
+    }
+
+    function checkClamp(node: HTMLElement, postId: number) {
+        const check = () => {
+            // Only check if not expanded - when expanded, content is fully visible
+            if (expandedCards.has(postId)) return;
+
+            const isClamped = node.scrollHeight > node.clientHeight + 1;
+            if (isClamped && !clampedCards.has(postId)) {
+                clampedCards.add(postId);
+                clampedCards = new Set(clampedCards);
+            } else if (!isClamped && clampedCards.has(postId)) {
+                clampedCards.delete(postId);
+                clampedCards = new Set(clampedCards);
+            }
+        };
+        // Check after render
+        setTimeout(check, 0);
+        return {
+            update() {
+                setTimeout(check, 0);
+            },
+            destroy() {
+                clampedCards.delete(postId);
+                clampedCards = new Set(clampedCards);
+            },
+        };
+    }
 
     // Modal state
     let showModal = $state(false);
@@ -48,7 +88,7 @@
     let formStartTime = $state(Date.now());
 
     onMount(async () => {
-        await loadThemeSettings();
+        await themeSettings.load();
         await loadPosts();
         await loadTags();
 
@@ -70,35 +110,13 @@
         };
     });
 
-    async function loadThemeSettings() {
-        try {
-            const settingsData = await api.getThemeSettings();
-
-            if (
-                settingsData.settings &&
-                typeof settingsData.settings === "object"
-            ) {
-                // Extract feedback display setting
-                if (
-                    settingsData.settings["display-feedback-publicly"] !==
-                    undefined
-                ) {
-                    displayFeedbackPublicly =
-                        settingsData.settings["display-feedback-publicly"];
-                }
-
-                // Extract statuses for displayed-statuses category
-                if (settingsData.settings["displayed-statuses-statuses"]) {
-                    allStatuses =
-                        settingsData.settings["displayed-statuses-statuses"];
-                }
-            }
-        } catch (err) {
-            console.error("Error loading theme settings:", err);
-            // If loading settings fails, use default value (true)
-            displayFeedbackPublicly = true;
-        }
-    }
+    // Derive values from theme settings store
+    let displayFeedbackPublicly = $derived(
+        $themeSettings["display-feedback-publicly"] ?? true,
+    );
+    let allStatuses = $derived(
+        $themeSettings["displayed-statuses-statuses"] ?? [],
+    );
 
     async function loadPosts() {
         try {
@@ -263,8 +281,8 @@
 </script>
 
 <svelte:head>
-    <title>Posts - Share Your Thoughts</title>
-    <meta name="description" content="Submit and explore posts" />
+    <title>{m.page_title()}</title>
+    <meta name="description" content={m.page_description()} />
 </svelte:head>
 
 <div class="min-h-screen bg-background flex flex-col">
@@ -290,7 +308,7 @@
                                 : 'hover:bg-accent hover:text-accent-foreground'} rounded-l-md border-r"
                         >
                             <Clock class="h-3.5 w-3.5" />
-                            Newest
+                            {m.sort_newest()}
                         </button>
                         <button
                             onclick={() => (sortBy = "popular")}
@@ -300,7 +318,7 @@
                                 : 'hover:bg-accent hover:text-accent-foreground'} rounded-r-md"
                         >
                             <TrendingUp class="h-3.5 w-3.5" />
-                            Popular
+                            {m.sort_popular()}
                         </button>
                     </div>
 
@@ -316,10 +334,10 @@
                     >
                         {#if viewMode === "list"}
                             <LayoutGrid class="h-4 w-4" />
-                            <span>Board View</span>
+                            <span>{m.view_board()}</span>
                         {:else}
                             <List class="h-4 w-4" />
-                            <span>List View</span>
+                            <span>{m.view_list()}</span>
                         {/if}
                     </button>
 
@@ -329,7 +347,7 @@
                         class="inline-flex items-center gap-2 h-9 px-4 rounded-md bg-primary text-primary-foreground hover:bg-primary/90 text-sm font-medium transition-colors"
                     >
                         <Plus class="h-4 w-4" />
-                        New Post
+                        {m.new_post()}
                     </button>
                 </div>
 
@@ -344,7 +362,7 @@
                         />
                         <Input
                             bind:value={searchQuery}
-                            placeholder="Search ideas..."
+                            placeholder={m.search_placeholder()}
                             class="pl-9 h-9"
                         />
                     </div>
@@ -359,7 +377,7 @@
                                 : ''}"
                         >
                             <FilterIcon class="h-3.5 w-3.5" />
-                            <span class="hidden sm:inline">Filter</span>
+                            <span class="hidden sm:inline">{m.filter()}</span>
                             {#if selectedTags.length > 0}
                                 <span
                                     class="flex h-4 w-4 items-center justify-center rounded-full bg-primary text-primary-foreground text-[10px] font-bold"
@@ -380,14 +398,14 @@
                                         class="text-xs font-semibold text-foreground flex items-center gap-1.5"
                                     >
                                         <TagIcon class="h-3 w-3" />
-                                        Filter by tags
+                                        {m.filter_by_tags()}
                                     </p>
                                     {#if selectedTags.length > 0}
                                         <button
                                             onclick={clearFilters}
                                             class="text-xs text-primary hover:text-primary/80 font-medium transition-colors"
                                         >
-                                            Clear all
+                                            {m.clear_all()}
                                         </button>
                                     {/if}
                                 </div>
@@ -396,7 +414,7 @@
                                         <p
                                             class="text-xs text-muted-foreground py-8 text-center"
                                         >
-                                            No tags available
+                                            {m.no_tags_available()}
                                         </p>
                                     {:else}
                                         <div class="space-y-0.5">
@@ -468,19 +486,19 @@
                         <Search class="h-5 w-5 text-muted-foreground" />
                     </div>
                     <h3 class="text-base font-semibold mb-1.5">
-                        No posts found
+                        {m.no_posts_found()}
                     </h3>
                     <p class="text-sm text-muted-foreground mb-4">
                         {searchQuery || selectedTags.length > 0
-                            ? "Try adjusting your filters or search query"
-                            : "No posts have been submitted yet"}
+                            ? m.no_posts_message_with_filters()
+                            : m.no_posts_message_empty()}
                     </p>
                     {#if searchQuery || selectedTags.length > 0}
                         <button
                             onclick={clearFilters}
                             class="text-sm font-medium text-primary hover:underline"
                         >
-                            Clear filters
+                            {m.clear_filters()}
                         </button>
                     {/if}
                 </div>
@@ -536,10 +554,35 @@
                                     <!-- Content -->
                                     {#if post.content}
                                         <div
-                                            class="prose prose-sm max-w-none text-muted-foreground line-clamp-3 mb-2"
+                                            use:checkClamp={post.id}
+                                            class="prose prose-sm max-w-none text-muted-foreground mb-2 {expandedCards.has(
+                                                post.id,
+                                            )
+                                                ? ''
+                                                : 'line-clamp-3'}"
                                         >
                                             {@html markdownToHtml(post.content)}
                                         </div>
+                                        {#if clampedCards.has(post.id) || expandedCards.has(post.id)}
+                                            <button
+                                                type="button"
+                                                onclick={() =>
+                                                    toggleCardExpand(post.id)}
+                                                class="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors mb-2"
+                                            >
+                                                {#if expandedCards.has(post.id)}
+                                                    <ChevronUp
+                                                        class="h-3.5 w-3.5"
+                                                    />
+                                                    <span>{m.show_less()}</span>
+                                                {:else}
+                                                    <ChevronDown
+                                                        class="h-3.5 w-3.5"
+                                                    />
+                                                    <span>{m.show_more()}</span>
+                                                {/if}
+                                            </button>
+                                        {/if}
                                     {/if}
 
                                     <!-- Media -->
@@ -558,12 +601,17 @@
                                         class="flex items-center justify-between text-xs text-muted-foreground pt-2 mt-2 border-t border-border"
                                     >
                                         <span>
-                                            Posted on {new Date(
-                                                post.created_at,
-                                            ).toLocaleDateString("en-US", {
-                                                year: "numeric",
-                                                month: "long",
-                                                day: "numeric",
+                                            {m.posted_on({
+                                                date: new Date(
+                                                    post.created_at,
+                                                ).toLocaleDateString(
+                                                    getLocale(),
+                                                    {
+                                                        year: "numeric",
+                                                        month: "long",
+                                                        day: "numeric",
+                                                    },
+                                                ),
                                             })}
                                         </span>
                                         <!-- Reactions (Bottom Right) -->
@@ -655,12 +703,43 @@
 
                                                 {#if post.content}
                                                     <div
-                                                        class="prose prose-sm dark:prose-invert text-xs text-muted-foreground/80 line-clamp-2"
+                                                        use:checkClamp={post.id}
+                                                        class="prose prose-sm dark:prose-invert text-xs text-muted-foreground/80 {expandedCards.has(
+                                                            post.id,
+                                                        )
+                                                            ? ''
+                                                            : 'line-clamp-2'}"
                                                     >
                                                         {@html markdownToHtml(
                                                             post.content,
                                                         )}
                                                     </div>
+                                                    {#if clampedCards.has(post.id) || expandedCards.has(post.id)}
+                                                        <button
+                                                            type="button"
+                                                            onclick={() =>
+                                                                toggleCardExpand(
+                                                                    post.id,
+                                                                )}
+                                                            class="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
+                                                        >
+                                                            {#if expandedCards.has(post.id)}
+                                                                <ChevronUp
+                                                                    class="h-3 w-3"
+                                                                />
+                                                                <span
+                                                                    >{m.show_less()}</span
+                                                                >
+                                                            {:else}
+                                                                <ChevronDown
+                                                                    class="h-3 w-3"
+                                                                />
+                                                                <span
+                                                                    >{m.show_more()}</span
+                                                                >
+                                                            {/if}
+                                                        </button>
+                                                    {/if}
                                                 {/if}
 
                                                 <!-- Reactions (Bottom Right) -->
@@ -682,7 +761,7 @@
                                         <p
                                             class="text-xs text-muted-foreground text-center py-8"
                                         >
-                                            No posts
+                                            {m.no_posts_in_status()}
                                         </p>
                                     {/if}
                                 </div>
@@ -711,7 +790,9 @@
             <div
                 class="flex items-center justify-between px-5 py-4 border-b border-border"
             >
-                <h2 class="text-lg font-semibold">New Post</h2>
+                <h2 class="text-lg font-semibold">
+                    {m.modal_new_post_title()}
+                </h2>
                 <button
                     onclick={closeModal}
                     class="h-8 w-8 inline-flex items-center justify-center rounded-md text-muted-foreground hover:text-foreground hover:bg-accent transition-colors"
@@ -740,12 +821,12 @@
                         for="post-title"
                         class="text-sm font-medium text-foreground"
                     >
-                        Title
+                        {m.form_title_label()}
                     </label>
                     <Input
                         id="post-title"
                         bind:value={postTitle}
-                        placeholder="What's on your mind?"
+                        placeholder={m.form_title_placeholder()}
                         class="h-10"
                         required
                     />
@@ -756,12 +837,12 @@
                         for="post-description"
                         class="text-sm font-medium text-foreground"
                     >
-                        Description
+                        {m.form_description_label()}
                     </label>
                     <Textarea
                         id="post-description"
                         bind:value={postDescription}
-                        placeholder="Provide more details..."
+                        placeholder={m.form_description_placeholder()}
                         class="resize-none"
                         rows={4}
                     />
@@ -773,7 +854,7 @@
                         onclick={closeModal}
                         class="px-4 h-9 inline-flex items-center justify-center rounded-md border border-input hover:bg-accent text-sm font-medium transition-colors"
                     >
-                        Cancel
+                        {m.button_cancel()}
                     </button>
                     <button
                         type="submit"
@@ -784,9 +865,9 @@
                             <div
                                 class="h-3.5 w-3.5 animate-spin border-2 border-primary-foreground border-t-transparent rounded-full"
                             ></div>
-                            Submitting...
+                            {m.button_submitting()}
                         {:else}
-                            Submit
+                            {m.button_submit()}
                         {/if}
                     </button>
                 </div>

@@ -1,9 +1,13 @@
 <script lang="ts">
     import { goto } from "$app/navigation";
     import { settings } from "$lib/stores/settings";
+    import { themeSettings } from "$lib/stores/themeSettings";
     import ThemeSelector from "$lib/components/ThemeSelector.svelte";
+    import LanguageSwitcher from "$lib/components/LanguageSwitcher.svelte";
     import { ArrowLeft } from "lucide-svelte";
     import { getApiEndpoint } from "$lib/config";
+    import { onMount } from "svelte";
+    import * as m from "$lib/paraglide/messages";
 
     export let showBackButton = false;
     export let title = ""; // Optional override for the title
@@ -31,6 +35,11 @@
         // For other relative URLs, return as is
         return url;
     }
+
+    // Load theme settings on mount
+    onMount(() => {
+        themeSettings.load();
+    });
 </script>
 
 <header
@@ -49,7 +58,7 @@
                     <button
                         on:click={() => goto("/")}
                         class="flex items-center justify-center w-7 h-7 rounded-md hover:bg-accent/50 transition-colors flex-shrink-0"
-                        title="Back to changelog"
+                        title={m.header_back_button()}
                     >
                         <ArrowLeft class="h-4 w-4" />
                     </button>
@@ -97,7 +106,9 @@
                         <h1
                             class="text-lg sm:text-xl font-semibold text-gray-900 dark:text-neutral-100 truncate px-3 py-2"
                         >
-                            {title || $settings?.title || "Changelog"}
+                            {title ||
+                                $settings?.title ||
+                                m.header_default_title()}
                         </h1>
                     </a>
                 {:else}
@@ -142,14 +153,21 @@
                         <h1
                             class="text-lg sm:text-xl font-semibold text-gray-900 dark:text-neutral-100 truncate px-3 py-2"
                         >
-                            {title || $settings?.title || "Changelog"}
+                            {title ||
+                                $settings?.title ||
+                                m.header_default_title()}
                         </h1>
                     </div>
                 {/if}
             </div>
 
-            <!-- Theme Toggle -->
-            <ThemeSelector />
+            <!-- Language Switcher & Theme Toggle -->
+            <div class="flex items-center gap-1">
+                {#if $themeSettings["enable-translations"]}
+                    <LanguageSwitcher />
+                {/if}
+                <ThemeSelector />
+            </div>
         </div>
     </div>
 </header>

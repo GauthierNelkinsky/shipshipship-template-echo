@@ -23,6 +23,13 @@
       "description": "Show user-submitted feedback on the public page",
       "type": "boolean",
       "default": true
+    },
+    {
+      "id": "enable-translations",
+      "label": "Enable Translations",
+      "description": "Allow users to switch between available languages (English, German, French, Spanish, Chinese)",
+      "type": "boolean",
+      "default": true
     }
   ],
   "categories": [

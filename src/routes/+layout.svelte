@@ -3,9 +3,11 @@
     import { onMount } from "svelte";
     import { settings, loadSettings } from "$lib/stores/settings";
     import { theme } from "$lib/stores/theme";
+    import { themeSettings } from "$lib/stores/themeSettings";
     import { Toaster } from "$lib/components/ui/sonner";
     import ConfigStatus from "$lib/components/ConfigStatus.svelte";
     import type { Snippet } from "svelte";
+    import * as m from "$lib/paraglide/messages";
 
     interface Props {
         children?: Snippet;
@@ -20,6 +22,9 @@
 
         // Load project settings
         await loadSettings();
+
+        // Load theme settings (for translations, feedback display, etc.)
+        await themeSettings.load();
     });
 
     // Reactive statement to update favicon when settings change
@@ -54,8 +59,8 @@
 </script>
 
 <svelte:head>
-    <title>{$settings.title || "Ideas"}</title>
-    <meta name="description" content="Submit and explore ideas" />
+    <title>{$settings.title || m.header_default_title()}</title>
+    <meta name="description" content={m.page_description()} />
     {#if faviconUrl}
         <link rel="icon" type="image/x-icon" href={faviconUrl} />
     {/if}

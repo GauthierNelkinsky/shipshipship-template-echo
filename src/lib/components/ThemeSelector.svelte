@@ -4,6 +4,7 @@
     import { Button } from "$lib/components/ui";
     import { onMount } from "svelte";
     import { fly } from "svelte/transition";
+    import * as m from "$lib/paraglide/messages";
 
     let selectedTheme: ThemePreference = "light";
     let isOpen = false;
@@ -12,15 +13,15 @@
         selectedTheme = theme.getPreference();
     });
 
-    const themeOptions = [
+    $: themeOptions = [
         {
             value: "light" as const,
-            label: "Light",
+            label: m.theme_light(),
             icon: Sun,
         },
         {
             value: "dark" as const,
-            label: "Dark",
+            label: m.theme_dark(),
             icon: Moon,
         },
     ];
@@ -62,7 +63,7 @@
         on:click={toggleDropdown}
         class="h-8 px-2 gap-1"
         type="button"
-        title="Select theme"
+        title={m.theme_select()}
         aria-expanded={isOpen}
         aria-haspopup="true"
     >
