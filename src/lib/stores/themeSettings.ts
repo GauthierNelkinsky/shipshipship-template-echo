@@ -4,6 +4,7 @@ import { api } from "$lib/api";
 export interface ThemeSettings {
   "display-feedback-publicly": boolean;
   "enable-translations": boolean;
+  "default-language": "en" | "de" | "fr" | "es" | "zh";
   "displayed-statuses-statuses"?: string[];
   [key: string]: any;
 }
@@ -11,6 +12,7 @@ export interface ThemeSettings {
 const defaultThemeSettings: ThemeSettings = {
   "display-feedback-publicly": true,
   "enable-translations": true,
+  "default-language": "en",
 };
 
 function createThemeSettingsStore() {

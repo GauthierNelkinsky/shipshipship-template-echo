@@ -8,6 +8,8 @@
     import ConfigStatus from "$lib/components/ConfigStatus.svelte";
     import type { Snippet } from "svelte";
     import * as m from "$lib/paraglide/messages";
+    import { getLocale, setLocale } from "$lib/paraglide/runtime";
+    import type { Locale } from "$lib/paraglide/runtime";
 
     interface Props {
         children?: Snippet;
@@ -15,6 +17,14 @@
 
     let { children }: Props = $props();
     let faviconUrl = $state("");
+
+    function hasUserLocalePreference(): boolean {
+        if (typeof document === "undefined") return false;
+        const cookies = document.cookie.split(";");
+        return cookies.some((cookie) =>
+            cookie.trim().startsWith("PARAGLIDE_LOCALE"),
+        );
+    }
 
     onMount(async () => {
         // Initialize theme
@@ -25,6 +35,19 @@
 
         // Load theme settings (for translations, feedback display, etc.)
         await themeSettings.load();
+
+        // Initialize default language
+        const defaultLang = $themeSettings["default-language"] as Locale;
+        if (
+            defaultLang &&
+            $themeSettings["enable-translations"] &&
+            !hasUserLocalePreference()
+        ) {
+            const currentLocale = getLocale();
+            if (currentLocale !== defaultLang) {
+                await setLocale(defaultLang, { reload: false });
+            }
+        }
     });
 
     // Reactive statement to update favicon when settings change

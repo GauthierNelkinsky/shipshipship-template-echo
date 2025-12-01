@@ -1,8 +1,7 @@
-import type { Handle } from '@sveltejs/kit';
-import { paraglideMiddleware } from '$lib/paraglide/server';
+import type { Handle } from "@sveltejs/kit";
+import { paraglideMiddleware } from "$lib/paraglide/server";
 
-// creating a handle to use the paraglide middleware
-const paraglideHandle: Handle = ({ event, resolve }) =>
+export const handle: Handle = ({ event, resolve }) =>
   paraglideMiddleware(
     event.request,
     ({ request: localizedRequest, locale }) => {
@@ -14,5 +13,3 @@ const paraglideHandle: Handle = ({ event, resolve }) =>
       });
     },
   );
-
-export const handle: Handle = paraglideHandle;

@@ -305,19 +305,19 @@
 
     <div class="flex-1 flex flex-col py-6 gap-4">
         <div
-            class="w-full max-w-[1200px] px-4 sm:px-6 lg:px-8 mx-auto sm:w-[70%] flex flex-col gap-4"
+            class="w-full max-w-[1200px] px-2 sm:px-2 md:px-20 lg:px-40 mx-auto flex flex-col gap-4"
         >
             <!-- Filters and Search -->
             <div class="flex flex-col gap-3">
-                <!-- First Row: Sort, View Toggle, and Create -->
-                <div class="flex flex-wrap items-center gap-2">
+                <!-- First Row: Sort and New Post (mobile: stacked) -->
+                <div class="flex flex-col sm:flex-row sm:items-center gap-2">
                     <!-- Sort -->
                     <div
-                        class="inline-flex items-center rounded-md border border-input bg-background h-9"
+                        class="inline-flex items-center rounded-md border border-input bg-background h-9 w-full sm:w-auto"
                     >
                         <button
                             onclick={() => (sortBy = "newest")}
-                            class="inline-flex items-center gap-1.5 px-3 h-full text-sm font-medium transition-colors {sortBy ===
+                            class="inline-flex items-center justify-center gap-1.5 px-3 h-full text-sm font-medium transition-colors flex-1 sm:flex-initial {sortBy ===
                             'newest'
                                 ? 'bg-accent text-accent-foreground'
                                 : 'hover:bg-accent hover:text-accent-foreground'} rounded-l-md border-r"
@@ -327,7 +327,7 @@
                         </button>
                         <button
                             onclick={() => (sortBy = "popular")}
-                            class="inline-flex items-center gap-1.5 px-3 h-full text-sm font-medium transition-colors {sortBy ===
+                            class="inline-flex items-center justify-center gap-1.5 px-3 h-full text-sm font-medium transition-colors flex-1 sm:flex-initial {sortBy ===
                             'popular'
                                 ? 'bg-accent text-accent-foreground'
                                 : 'hover:bg-accent hover:text-accent-foreground'} rounded-r-md"
@@ -337,15 +337,15 @@
                         </button>
                     </div>
 
-                    <!-- Spacer -->
-                    <div class="flex-1 min-w-4"></div>
+                    <!-- Spacer (desktop only) -->
+                    <div class="hidden sm:block sm:flex-1"></div>
 
-                    <!-- View Toggle -->
+                    <!-- View Toggle (desktop only) -->
                     <button
                         onclick={() =>
                             (viewMode =
                                 viewMode === "list" ? "kanban" : "list")}
-                        class="inline-flex items-center justify-center gap-2 h-9 px-3 rounded-md border border-input bg-background hover:bg-accent hover:text-accent-foreground text-sm font-medium transition-colors"
+                        class="hidden sm:inline-flex items-center justify-center gap-2 h-9 px-3 rounded-md border border-input bg-background hover:bg-accent hover:text-accent-foreground text-sm font-medium transition-colors"
                     >
                         {#if viewMode === "list"}
                             <LayoutGrid class="h-4 w-4" />
@@ -359,19 +359,17 @@
                     <!-- New Post -->
                     <button
                         onclick={openModal}
-                        class="inline-flex items-center gap-2 h-9 px-4 rounded-md bg-primary text-primary-foreground hover:bg-primary/90 text-sm font-medium transition-colors"
+                        class="inline-flex items-center justify-center gap-2 h-9 px-4 rounded-md bg-primary text-primary-foreground hover:bg-primary/90 text-sm font-medium transition-colors w-full sm:w-auto"
                     >
                         <Plus class="h-4 w-4" />
                         {m.new_post()}
                     </button>
                 </div>
 
-                <!-- Second Row: Search and Filter -->
-                <div
-                    class="flex flex-col sm:flex-row gap-2 items-start sm:items-center"
-                >
+                <!-- Second Row: Search, Filter, and View Toggle (mobile) -->
+                <div class="flex gap-2 items-center">
                     <!-- Search -->
-                    <div class="relative w-full sm:flex-1">
+                    <div class="relative flex-1">
                         <Search
                             class="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-muted-foreground"
                         />
@@ -382,8 +380,27 @@
                         />
                     </div>
 
+                    <!-- View Toggle (mobile only) -->
+                    <button
+                        onclick={() =>
+                            (viewMode =
+                                viewMode === "list" ? "kanban" : "list")}
+                        class="inline-flex sm:hidden items-center justify-center gap-2 h-9 px-3 rounded-md border border-input bg-background hover:bg-accent hover:text-accent-foreground text-sm font-medium transition-colors flex-shrink-0"
+                    >
+                        {#if viewMode === "list"}
+                            <LayoutGrid class="h-4 w-4" />
+                            <span>{m.view_board()}</span>
+                        {:else}
+                            <List class="h-4 w-4" />
+                            <span>{m.view_list()}</span>
+                        {/if}
+                    </button>
+
                     <!-- Filter -->
-                    <div class="relative" bind:this={filterPopoverRef}>
+                    <div
+                        class="relative flex-shrink-0"
+                        bind:this={filterPopoverRef}
+                    >
                         <button
                             onclick={() => (showTagsPopover = !showTagsPopover)}
                             class="inline-flex items-center justify-center gap-1.5 h-9 px-3 rounded-md border border-input bg-background hover:bg-accent hover:text-accent-foreground text-sm font-medium transition-all {selectedTags.length >
@@ -404,7 +421,7 @@
 
                         {#if showTagsPopover}
                             <div
-                                class="absolute top-full mt-2 left-0 w-56 rounded-lg border border-border bg-popover shadow-lg z-50 overflow-hidden"
+                                class="absolute top-full mt-2 right-0 sm:left-0 w-64 sm:w-56 rounded-lg border border-border bg-popover shadow-lg z-50 overflow-hidden"
                             >
                                 <div
                                     class="flex items-center justify-between px-3 py-2 border-b border-border/50 bg-muted/30"
