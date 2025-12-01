@@ -14,7 +14,7 @@
   ],
   "technologies": ["SvelteKit", "TypeScript", "Tailwind CSS"],
   "compatibility": {
-    "minVersion": "1.2.3"
+    "minVersion": "1.2.4"
   },
   "settings": [
     {
