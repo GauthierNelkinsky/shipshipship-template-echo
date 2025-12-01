@@ -30,6 +30,69 @@
       "description": "Allow users to switch between available languages (English, German, French, Spanish, Chinese)",
       "type": "boolean",
       "default": true
+    },
+    {
+      "id": "default-language",
+      "label": "Default Language",
+      "description": "Choose the default language for the application",
+      "type": "select",
+      "options": [
+        {
+          "value": "en",
+          "label": "English"
+        },
+        {
+          "value": "de",
+          "label": "German"
+        },
+        {
+          "value": "fr",
+          "label": "French"
+        },
+        {
+          "value": "es",
+          "label": "Spanish"
+        },
+        {
+          "value": "zh",
+          "label": "Chinese"
+        }
+      ],
+      "default": "en"
+    },
+    {
+      "id": "default-event-order",
+      "label": "Default Event Order",
+      "description": "Choose how events are ordered by default",
+      "type": "select",
+      "options": [
+        {
+          "value": "newest",
+          "label": "Newest First"
+        },
+        {
+          "value": "popularity",
+          "label": "Most Popular"
+        }
+      ],
+      "default": "newest"
+    },
+    {
+      "id": "reaction-type",
+      "label": "Reaction Type",
+      "description": "Choose the type of reactions users can give (only applies when reactions are enabled)",
+      "type": "select",
+      "options": [
+        {
+          "value": "emoji",
+          "label": "Emoji Reactions"
+        },
+        {
+          "value": "upvotes",
+          "label": "Upvotes Only"
+        }
+      ],
+      "default": "emoji"
     }
   ],
   "categories": [

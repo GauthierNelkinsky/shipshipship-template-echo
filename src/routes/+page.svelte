@@ -9,6 +9,7 @@
     import Header from "$lib/components/Header.svelte";
     import Footer from "$lib/components/Footer.svelte";
     import ReactionPicker from "$lib/components/ReactionPicker.svelte";
+    import UpvoteButton from "$lib/components/UpvoteButton.svelte";
     import Badge from "$lib/components/ui/badge.svelte";
     import Input from "$lib/components/ui/input.svelte";
     import Textarea from "$lib/components/ui/textarea.svelte";
@@ -36,6 +37,11 @@
     let selectedTags = $state<number[]>([]);
     let availableTags = $state<Tag[]>([]);
     let sortBy = $state<"newest" | "popular" | "oldest">("newest");
+
+    // Derive default event order from theme settings
+    let defaultEventOrder = $derived(
+        $themeSettings["default-event-order"] ?? "newest",
+    );
     let showTagsPopover = $state(false);
     let viewMode = $state<"list" | "kanban">("list");
     let filterPopoverRef = $state<HTMLDivElement | null>(null);
@@ -117,6 +123,15 @@
     let allStatuses = $derived(
         $themeSettings["displayed-statuses-statuses"] ?? [],
     );
+    let reactionType = $derived($themeSettings["reaction-type"] ?? "emoji");
+
+    // Initialize sortBy with the default event order from settings
+    $effect(() => {
+        // Map "popularity" to "popular" to match the internal sortBy type
+        const mappedOrder =
+            defaultEventOrder === "popularity" ? "popular" : defaultEventOrder;
+        sortBy = mappedOrder as "newest" | "popular" | "oldest";
+    });
 
     async function loadPosts() {
         try {
@@ -616,12 +631,19 @@
                                         </span>
                                         <!-- Reactions (Bottom Right) -->
                                         <div class="flex-shrink-0">
-                                            <ReactionPicker
-                                                eventId={post.id}
-                                                variant="popover"
-                                                size="sm"
-                                                initialReactions={post.reaction_summary}
-                                            />
+                                            {#if reactionType === "upvotes"}
+                                                <UpvoteButton
+                                                    eventId={post.id}
+                                                    initialReactions={post.reaction_summary}
+                                                />
+                                            {:else}
+                                                <ReactionPicker
+                                                    eventId={post.id}
+                                                    variant="popover"
+                                                    size="sm"
+                                                    initialReactions={post.reaction_summary}
+                                                />
+                                            {/if}
                                         </div>
                                     </div>
                                 </div>
@@ -638,7 +660,7 @@
             <div
                 class="overflow-x-auto h-[calc(100svh-150px)] w-full px-4 sm:px-6 lg:px-8"
             >
-                <div class="flex gap-3 h-full min-w-max pb-4">
+                <div class="flex gap-3 h-full min-w-max pb-4 mx-auto w-fit">
                     {#each Object.entries(groupedPosts) as [status, statusPosts]}
                         <div class="flex-shrink-0 w-72 h-full flex flex-col">
                             <div
@@ -744,14 +766,21 @@
 
                                                 <!-- Reactions (Bottom Right) -->
                                                 <div
-                                                    class="flex justify-end pt-1 border-t border-border/50"
+                                                    class="flex items-center justify-between text-xs text-muted-foreground pt-2 mt-2 border-t border-border"
                                                 >
-                                                    <ReactionPicker
-                                                        eventId={post.id}
-                                                        variant="popover"
-                                                        size="sm"
-                                                        initialReactions={post.reaction_summary}
-                                                    />
+                                                    {#if reactionType === "upvotes"}
+                                                        <UpvoteButton
+                                                            eventId={post.id}
+                                                            initialReactions={post.reaction_summary}
+                                                        />
+                                                    {:else}
+                                                        <ReactionPicker
+                                                            eventId={post.id}
+                                                            variant="popover"
+                                                            size="sm"
+                                                            initialReactions={post.reaction_summary}
+                                                        />
+                                                    {/if}
                                                 </div>
                                             </div>
                                         </article>

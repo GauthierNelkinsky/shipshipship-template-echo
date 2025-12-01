@@ -14,7 +14,8 @@ const defaultThemeSettings: ThemeSettings = {
 };
 
 function createThemeSettingsStore() {
-  const { subscribe, set, update } = writable<ThemeSettings>(defaultThemeSettings);
+  const { subscribe, set, update } =
+    writable<ThemeSettings>(defaultThemeSettings);
 
   let loaded = false;
 
@@ -26,7 +27,10 @@ function createThemeSettingsStore() {
       try {
         const settingsData = await api.getThemeSettings();
 
-        if (settingsData.settings && typeof settingsData.settings === "object") {
+        if (
+          settingsData.settings &&
+          typeof settingsData.settings === "object"
+        ) {
           const newSettings: ThemeSettings = {
             ...defaultThemeSettings,
             ...settingsData.settings,
