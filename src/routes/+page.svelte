@@ -1,5 +1,6 @@
 <script lang="ts">
     import { onMount } from "svelte";
+    import { fly } from "svelte/transition";
     import { api } from "$lib/api";
     import type { Event, Tag, EventStatus } from "$lib/types";
     import { parseEvent, markdownToHtml, formatDate } from "$lib/utils";
@@ -47,6 +48,8 @@
     let filterPopoverRef = $state<HTMLDivElement | null>(null);
     let expandedCards = $state<Set<number>>(new Set());
     let clampedCards = $state<Set<number>>(new Set());
+    let showBoardViewTutorial = $state(false);
+    let boardViewButtonRef = $state<HTMLButtonElement | null>(null);
 
     function toggleCardExpand(postId: number) {
         if (expandedCards.has(postId)) {
@@ -106,6 +109,13 @@
                 !filterPopoverRef.contains(event.target as Node)
             ) {
                 showTagsPopover = false;
+            }
+            if (
+                showBoardViewTutorial &&
+                boardViewButtonRef &&
+                !boardViewButtonRef.contains(event.target as Node)
+            ) {
+                showBoardViewTutorial = false;
             }
         };
 
@@ -209,11 +219,28 @@
                     new Date(a.created_at).getTime(),
             );
         } else if (sortBy === "popular") {
-            result.sort(
-                (a, b) =>
-                    (b.reaction_summary?.total_count || 0) -
-                    (a.reaction_summary?.total_count || 0),
-            );
+            result.sort((a, b) => {
+                let aCount = 0;
+                let bCount = 0;
+
+                if (reactionType === "upvotes") {
+                    // Only count thumbs_up reactions
+                    aCount =
+                        a.reaction_summary?.reactions?.find(
+                            (r) => r.reaction_type === "thumbs_up",
+                        )?.count || 0;
+                    bCount =
+                        b.reaction_summary?.reactions?.find(
+                            (r) => r.reaction_type === "thumbs_up",
+                        )?.count || 0;
+                } else {
+                    // Count all reactions
+                    aCount = a.reaction_summary?.total_count || 0;
+                    bCount = b.reaction_summary?.total_count || 0;
+                }
+
+                return bCount - aCount;
+            });
         }
 
         return result;
@@ -341,20 +368,41 @@
                     <div class="hidden sm:block sm:flex-1"></div>
 
                     <!-- View Toggle (desktop only) -->
-                    <button
-                        onclick={() =>
-                            (viewMode =
-                                viewMode === "list" ? "kanban" : "list")}
-                        class="hidden sm:inline-flex items-center justify-center gap-2 h-9 px-3 rounded-md border border-input bg-background hover:bg-accent hover:text-accent-foreground text-sm font-medium transition-colors"
-                    >
-                        {#if viewMode === "list"}
-                            <LayoutGrid class="h-4 w-4" />
-                            <span>{m.view_board()}</span>
-                        {:else}
-                            <List class="h-4 w-4" />
-                            <span>{m.view_list()}</span>
+                    <div class="relative hidden sm:block">
+                        <button
+                            bind:this={boardViewButtonRef}
+                            onmouseenter={() => (showBoardViewTutorial = true)}
+                            onmouseleave={() => (showBoardViewTutorial = false)}
+                            onclick={() =>
+                                (viewMode =
+                                    viewMode === "list" ? "kanban" : "list")}
+                            class="inline-flex items-center justify-center gap-2 h-9 px-3 rounded-md border border-input bg-background hover:bg-accent hover:text-accent-foreground text-sm font-medium transition-colors"
+                        >
+                            {#if viewMode === "list"}
+                                <LayoutGrid class="h-4 w-4" />
+                                <span>{m.view_board()}</span>
+                            {:else}
+                                <List class="h-4 w-4" />
+                                <span>{m.view_list()}</span>
+                            {/if}
+                        </button>
+
+                        {#if showBoardViewTutorial && viewMode === "list"}
+                            <div
+                                transition:fly={{ duration: 200, y: -5 }}
+                                class="absolute z-50 top-full mt-2 left-1/2 -translate-x-1/2 w-48 p-2 bg-popover border border-border rounded-md shadow-lg"
+                            >
+                                <p
+                                    class="text-[11px] text-foreground/90 leading-snug"
+                                >
+                                    {m.view_board_tutorial()}
+                                </p>
+                                <div
+                                    class="absolute -top-1 left-1/2 -translate-x-1/2 w-2 h-2 bg-popover border-l border-t border-border rotate-45"
+                                ></div>
+                            </div>
                         {/if}
-                    </button>
+                    </div>
 
                     <!-- New Post -->
                     <button
