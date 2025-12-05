@@ -1,6 +1,6 @@
 <script lang="ts">
     import { goto } from "$app/navigation";
-    import { settings } from "$lib/stores/settings";
+    import { settings, loadSettings } from "$lib/stores/settings";
     import { themeSettings } from "$lib/stores/themeSettings";
     import ThemeSelector from "$lib/components/ThemeSelector.svelte";
     import LanguageSwitcher from "$lib/components/LanguageSwitcher.svelte";
@@ -25,8 +25,8 @@
             return url;
         }
 
-        // If the URL starts with '/api/upload/', use the API endpoint
-        if (url.startsWith("/api/upload/")) {
+        // If the URL starts with '/api/uploads/', use the API endpoint
+        if (url.startsWith("/api/uploads/")) {
             // Remove the '/api' prefix as getApiEndpoint will add it
             const path = url.substring(4);
             return getApiEndpoint(path);
@@ -71,21 +71,21 @@
                         rel="noopener noreferrer"
                         class="flex items-center space-x-1 hover:opacity-80 transition-opacity min-w-0 flex-1"
                     >
-                        {#if $settings?.logo_url}
+                        {#if $themeSettings["logo-light"]}
                             <div class="py-2">
                                 <img
                                     src={getCompleteImageUrl(
-                                        $settings.logo_url,
+                                        $themeSettings["logo-light"],
                                     )}
                                     alt="Logo"
                                     class="h-12 max-h-12 w-auto object-contain dark:hidden"
                                 />
                             </div>
-                            {#if $settings?.dark_logo_url}
+                            {#if $themeSettings["logo-dark"]}
                                 <div class="py-2">
                                     <img
                                         src={getCompleteImageUrl(
-                                            $settings.dark_logo_url,
+                                            $themeSettings["logo-dark"],
                                         )}
                                         alt="Logo"
                                         class="h-12 max-h-12 w-auto object-contain hidden dark:block"
@@ -95,7 +95,7 @@
                                 <div class="py-2">
                                     <img
                                         src={getCompleteImageUrl(
-                                            $settings.logo_url,
+                                            $themeSettings["logo-light"],
                                         )}
                                         alt="Logo"
                                         class="h-12 max-h-12 w-auto object-contain hidden dark:block"
@@ -103,33 +103,35 @@
                                 </div>
                             {/if}
                         {/if}
-                        <h1
-                            class="text-lg sm:text-xl font-semibold text-gray-900 dark:text-neutral-100 truncate px-3 py-2"
-                        >
-                            {title ||
-                                $settings?.title ||
-                                m.header_default_title()}
-                        </h1>
+                        {#if $themeSettings["display-title-in-header"]}
+                            <h1
+                                class="text-lg sm:text-xl font-semibold text-gray-900 dark:text-neutral-100 truncate px-3 py-2"
+                            >
+                                {title ||
+                                    $settings?.title ||
+                                    m.header_default_title()}
+                            </h1>
+                        {/if}
                     </a>
                 {:else}
                     <div
                         class="flex items-center space-x-1 min-w-0 flex-1 py-2"
                     >
-                        {#if $settings?.logo_url}
+                        {#if $themeSettings["logo-light"]}
                             <div class="py-2">
                                 <img
                                     src={getCompleteImageUrl(
-                                        $settings.logo_url,
+                                        $themeSettings["logo-light"],
                                     )}
                                     alt="Logo"
                                     class="h-12 max-h-12 w-auto object-contain dark:hidden"
                                 />
                             </div>
-                            {#if $settings?.dark_logo_url}
+                            {#if $themeSettings["logo-dark"]}
                                 <div class="py-2">
                                     <img
                                         src={getCompleteImageUrl(
-                                            $settings.dark_logo_url,
+                                            $themeSettings["logo-dark"],
                                         )}
                                         alt="Logo"
                                         class="h-12 max-h-12 w-auto object-contain hidden dark:block"
@@ -139,7 +141,7 @@
                                 <div class="py-2">
                                     <img
                                         src={getCompleteImageUrl(
-                                            $settings.logo_url,
+                                            $themeSettings["logo-light"],
                                         )}
                                         alt="Logo"
                                         class="h-12 max-h-12 w-auto object-contain hidden dark:block"
@@ -150,13 +152,15 @@
                             <!-- When no logo is present, add padding for better spacing -->
                             <div class="py-2 px-3"></div>
                         {/if}
-                        <h1
-                            class="text-lg sm:text-xl font-semibold text-gray-900 dark:text-neutral-100 truncate px-3 py-2"
-                        >
-                            {title ||
-                                $settings?.title ||
-                                m.header_default_title()}
-                        </h1>
+                        {#if $themeSettings["display-title-in-header"]}
+                            <h1
+                                class="text-lg sm:text-xl font-semibold text-gray-900 dark:text-neutral-100 truncate px-3 py-2"
+                            >
+                                {title ||
+                                    $settings?.title ||
+                                    m.header_default_title()}
+                            </h1>
+                        {/if}
                     </div>
                 {/if}
             </div>

@@ -1,10 +1,12 @@
 <script lang="ts">
     import { onMount } from "svelte";
     import { fly } from "svelte/transition";
+    import { toast } from "svelte-sonner";
     import { api } from "$lib/api";
     import type { Event, Tag, EventStatus } from "$lib/types";
     import { parseEvent, markdownToHtml, formatDate } from "$lib/utils";
     import { themeSettings } from "$lib/stores/themeSettings";
+    import { statusMappings } from "$lib/stores/statusMappings";
     import * as m from "$lib/paraglide/messages";
     import { getLocale } from "$lib/paraglide/runtime";
     import Header from "$lib/components/Header.svelte";
@@ -98,6 +100,7 @@
 
     onMount(async () => {
         await themeSettings.load();
+        await statusMappings.load();
         await loadPosts();
         await loadTags();
 
@@ -127,12 +130,20 @@
     });
 
     // Derive values from theme settings store
-    let displayFeedbackPublicly = $derived(
-        $themeSettings["display-feedback-publicly"] ?? true,
-    );
-    let allStatuses = $derived(
-        $themeSettings["displayed-statuses-statuses"] ?? [],
-    );
+    // Combine statuses from both displayed-statuses and feedback categories
+    let allStatuses = $derived.by(() => {
+        const displayedStatuses = $statusMappings["displayed-statuses"] ?? [];
+        const feedbackStatuses = $statusMappings["feedback"] ?? [];
+
+        // Combine both arrays and remove duplicates based on slug
+        const combined = [...displayedStatuses, ...feedbackStatuses];
+        const uniqueStatuses = combined.filter(
+            (status, index, self) =>
+                index === self.findIndex((s) => s.slug === status.slug),
+        );
+
+        return uniqueStatuses;
+    });
     let reactionType = $derived($themeSettings["reaction-type"] ?? "emoji");
 
     // Initialize sortBy with the default event order from settings
@@ -158,6 +169,9 @@
                 }
 
                 // Handle feedback category based on displayFeedbackPublicly setting
+                const displayFeedbackPublicly =
+                    $themeSettings["display-feedback-publicly"] ?? true;
+
                 if (displayFeedbackPublicly && data.categories["feedback"]) {
                     allPosts = [...allPosts, ...data.categories["feedback"]];
                 }
@@ -250,20 +264,34 @@
         // Initialize groups with all statuses from API
         const groups: Record<string, Event[]> = {};
 
-        // Initialize groups for all statuses
-        allStatuses.forEach((status) => {
-            groups[status] = [];
+        // Create a map for case-insensitive lookup
+        const statusSlugMap = new Map<string, string>();
+        allStatuses.forEach((statusMapping) => {
+            groups[statusMapping.slug] = [];
+            // Map lowercase version to actual slug
+            statusSlugMap.set(
+                statusMapping.slug.toLowerCase(),
+                statusMapping.slug,
+            );
         });
 
         // Populate groups with posts
         filteredPosts.forEach((post) => {
-            const status = post.status;
+            const postStatus = post.status;
 
-            // Initialize group if it doesn't exist (for any unexpected statuses)
-            if (!groups[status]) {
-                groups[status] = [];
+            // Try to find the matching slug (case-insensitive)
+            const normalizedStatus = postStatus.toLowerCase();
+            const matchingSlug = statusSlugMap.get(normalizedStatus);
+
+            if (matchingSlug) {
+                groups[matchingSlug].push(post);
+            } else {
+                // Initialize group if it doesn't exist (for any unexpected statuses)
+                if (!groups[postStatus]) {
+                    groups[postStatus] = [];
+                }
+                groups[postStatus].push(post);
             }
-            groups[status].push(post);
         });
 
         return groups;
@@ -292,11 +320,14 @@
 
     function closeModal() {
         showModal = false;
+        postTitle = "";
+        postDescription = "";
+        postError = "";
     }
 
     async function submitPost() {
         if (!postTitle.trim()) {
-            postError = "Please enter a title";
+            toast.error(m.post_title_required());
             return;
         }
 
@@ -310,12 +341,15 @@
                 formStartTime,
             );
 
+            toast.success(m.post_submit_success());
             closeModal();
+            postTitle = "";
+            postDescription = "";
             await loadPosts();
         } catch (err) {
             const errorMessage =
-                err instanceof Error ? err.message : "Failed to submit post";
-            postError = errorMessage;
+                err instanceof Error ? err.message : m.post_submit_error();
+            toast.error(errorMessage);
         } finally {
             submittingPost = false;
         }
@@ -587,6 +621,9 @@
                 <div class="space-y-3">
                     {#each filteredPosts as post}
                         {@const parsedPost = parseEvent(post)}
+                        {@const statusMapping = allStatuses.find(
+                            (s) => s.slug === post.status,
+                        )}
                         <article
                             class="relative bg-card border border-border rounded-lg p-4 hover:shadow-sm hover:border-border/80 transition-all group"
                         >
@@ -594,7 +631,7 @@
                                 <span
                                     class="absolute top-3 right-3 px-2 py-0.5 rounded bg-primary/10 text-primary border border-primary/20 font-bold uppercase text-[10px] tracking-wider"
                                 >
-                                    {post.status}
+                                    {statusMapping?.display_name || post.status}
                                 </span>
                             {/if}
                             <div class="flex flex-col">
@@ -726,7 +763,9 @@
                 class="overflow-x-auto h-[calc(100svh-150px)] w-full px-4 sm:px-6 lg:px-8"
             >
                 <div class="flex gap-3 h-full min-w-max pb-4 mx-auto w-fit">
-                    {#each Object.entries(groupedPosts) as [status, statusPosts]}
+                    {#each allStatuses.sort((a, b) => a.order - b.order) as statusMapping}
+                        {@const status = statusMapping.slug}
+                        {@const statusPosts = groupedPosts[status] || []}
                         <div class="flex-shrink-0 w-72 h-full flex flex-col">
                             <div
                                 class="bg-muted/30 border border-border rounded-lg h-full flex flex-col"
@@ -737,7 +776,7 @@
                                     <h3
                                         class="font-semibold text-xs uppercase tracking-wide text-foreground"
                                     >
-                                        {status}
+                                        {statusMapping?.display_name || status}
                                     </h3>
                                     <span
                                         class="px-1.5 py-0.5 rounded text-xs bg-muted text-muted-foreground font-medium"
@@ -902,14 +941,6 @@
                 }}
                 class="p-5 space-y-4"
             >
-                {#if postError}
-                    <div
-                        class="p-2.5 bg-destructive/10 border border-destructive/20 rounded-md text-xs text-destructive font-medium"
-                    >
-                        {postError}
-                    </div>
-                {/if}
-
                 <div class="space-y-1.5">
                     <label
                         for="post-title"

@@ -145,6 +145,14 @@ class ApiClient {
     }>("/theme/settings");
   }
 
+  async getStatusMappings() {
+    return this.request<{
+      success: boolean;
+      theme_id: string;
+      categories: { [categoryId: string]: any[] };
+    }>("/theme/status-mappings");
+  }
+
   // Newsletter endpoints
   async subscribeToNewsletter(email: string) {
     return this.request<{

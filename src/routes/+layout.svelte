@@ -4,6 +4,7 @@
     import { settings, loadSettings } from "$lib/stores/settings";
     import { theme } from "$lib/stores/theme";
     import { themeSettings } from "$lib/stores/themeSettings";
+    import { getApiEndpoint } from "$lib/config";
     import { Toaster } from "$lib/components/ui/sonner";
     import ConfigStatus from "$lib/components/ConfigStatus.svelte";
     import type { Snippet } from "svelte";
@@ -17,6 +18,30 @@
 
     let { children }: Props = $props();
     let faviconUrl = $state("");
+
+    // Function to get the complete URL for images that might be relative to the API
+    function getCompleteImageUrl(url: string | undefined): string {
+        if (!url) return "";
+
+        // If the URL is already absolute (starts with http:// or https://) or is a data URL, return as is
+        if (
+            url.startsWith("http://") ||
+            url.startsWith("https://") ||
+            url.startsWith("data:")
+        ) {
+            return url;
+        }
+
+        // If the URL starts with '/api/uploads/', use the API endpoint
+        if (url.startsWith("/api/uploads/")) {
+            // Remove the '/api' prefix as getApiEndpoint will add it
+            const path = url.substring(4);
+            return getApiEndpoint(path);
+        }
+
+        // For other relative URLs, return as is
+        return url;
+    }
 
     function hasUserLocalePreference(): boolean {
         if (typeof document === "undefined") return false;
@@ -52,7 +77,7 @@
 
     // Reactive statement to update favicon when settings change
     $effect(() => {
-        faviconUrl = $settings.favicon_url || "";
+        faviconUrl = getCompleteImageUrl($settings.favicon_url) || "";
         updateFavicon(faviconUrl);
     });
 
